@@ -15,7 +15,7 @@ BLUE, ORANGE, AQUA, YELLOW, MAGENTA, GREEN, VIOLET, RED = (
     "#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948")
 CATEGORICAL = [BLUE, ORANGE, AQUA, YELLOW, MAGENTA, GREEN, VIOLET, RED]
 # the same entity keeps its color in every chart
-MODEL_COLORS = {"XGB base": BLUE, "XGB + GRU": ORANGE, "GRU": AQUA, "WoE-логрег": YELLOW, "WoE-логрег + GRU": VIOLET}
+MODEL_COLORS = {"XGB base": BLUE, "XGB + GRU": ORANGE, "GRU": AQUA, "WoE scorecard": YELLOW, "WoE scorecard + GRU": VIOLET}
 SPLIT_COLORS = {"train": "#86b6ef", "valid": "#3987e5", "oot": "#104281"}   # ordinal blue ramp
 SEGMENT_COLORS = {"L2": BLUE, "L3": ORANGE, "L4+": AQUA}
 DIVERGING = LinearSegmentedColormap.from_list("div", ["#104281", "#3987e5", "#f0efec", "#e66767", "#a8201f"])
@@ -63,13 +63,13 @@ def monthly_overview(apps: pd.DataFrame, target: str, oot_start, out_dir=None):
     for s in ["L2", "L3", "L4+"]:
         a1.bar(vol.index, vol[s], bottom=bottom, width=24, color=SEGMENT_COLORS[s], label=s, edgecolor=SURFACE, linewidth=1)
         bottom += vol[s].to_numpy()
-    a1.set_ylabel("Заявок в месяц")
-    a1.set_title("Объём выдач по сегментам")
+    a1.set_ylabel("Applications per month")
+    a1.set_title("Issued loans by segment")
     a1.legend(ncol=3, loc="upper left")
     a2.plot(rate.index, rate.values, color=INK, marker="o")
     a2.yaxis.set_major_formatter(PercentFormatter(1.0, decimals=0))
-    a2.set_ylabel(f"Доля {target}")
-    a2.set_title(f"Уровень дефолта ({target}) по месяцам")
+    a2.set_ylabel(f"{target} rate")
+    a2.set_title(f"Monthly default rate ({target})")
     for ax in (a1, a2):
         _shade_oot(ax, oot_start, label=ax is a1)
     fig.tight_layout()
@@ -85,9 +85,9 @@ def client_timeline(events: pd.DataFrame, loans: pd.DataFrame, client_id: int, a
         end = close.get(r["loan_id"], ev["event_time"].max())
         ax.plot([r["issue_time"], end], [0, 0], color=AXIS, lw=7, solid_capstyle="round", zorder=1)
         ax.plot([r["first_due_date"]] * 2, [-0.18, 0.18], color=INK2, lw=1, zorder=2)
-    styles = {"issue": (BLUE, "o", "выдача"), "payment": (AQUA, "s", "платёж"), "prolongation": (YELLOW, "D", "пролонгация"),
-              "closure": (GREEN, "^", "закрытие"), "autodebit_fail": (MAGENTA, "v", "неуспешное автосписание"),
-              "cancel": (RED, "x", "отмена платежа")}
+    styles = {"issue": (BLUE, "o", "issue"), "payment": (AQUA, "s", "payment"), "prolongation": (YELLOW, "D", "prolongation"),
+              "closure": (GREEN, "^", "closure"), "autodebit_fail": (MAGENTA, "v", "failed auto-debit"),
+              "cancel": (RED, "x", "payment reversal")}
     for e, (c, mk, lab) in styles.items():
         s = ev[ev["event"] == e]
         if len(s):
@@ -97,11 +97,11 @@ def client_timeline(events: pd.DataFrame, loans: pd.DataFrame, client_id: int, a
             ax.scatter(s["event_time"], np.full(len(s), y), color=c, marker=mk, s=42, label=lab, zorder=3, **ring)
     if app_date is not None:
         ax.axvline(app_date, color=ORANGE, lw=1.5)
-        ax.text(app_date, 1.25, " скоринг заявки", color=INK, fontsize=9, va="center")
+        ax.text(app_date, 1.25, " scored application", color=INK, fontsize=9, va="center")
     ax.set_yticks([])
     ax.set_ylim(-1.3, 1.45)
     ax.grid(axis="y", visible=False)
-    ax.set_title(f"История клиента {client_id}: займы (серые полосы, штрих — плановая дата) и события")
+    ax.set_title(f"Client {client_id}: loans (grey bars, tick = due date) and events")
     ax.legend(ncol=6, loc="lower center", bbox_to_anchor=(0.5, -0.38))
     fig.tight_layout()
     return save(fig, "02_client_timeline", out_dir)
@@ -113,10 +113,10 @@ def sequence_lengths(lengths, segments, out_dir=None):
     bins = np.arange(0, min(d["len"].quantile(0.995), 150) + 4, 3)
     for s in ["L2", "L3", "L4+"]:
         v = d.loc[d["seg"] == s, "len"]
-        ax.hist(v, bins=bins, histtype="step", lw=2, color=SEGMENT_COLORS[s], label=f"{s}: медиана {v.median():.0f}")
-    ax.set_xlabel("Токенов в истории до заявки")
-    ax.set_ylabel("Заявок")
-    ax.set_title("Длина последовательности по сегментам")
+        ax.hist(v, bins=bins, histtype="step", lw=2, color=SEGMENT_COLORS[s], label=f"{s}: median {v.median():.0f}")
+    ax.set_xlabel("Tokens in history before the application")
+    ax.set_ylabel("Applications")
+    ax.set_title("Sequence length by segment")
     ax.legend()
     fig.tight_layout()
     return save(fig, "03_sequence_lengths", out_dir)
@@ -130,9 +130,9 @@ def selection_funnel(funnel: pd.DataFrame, out_dir=None):
     for yi, n in zip(y, funnel["n_features"]):
         ax.text(n + funnel["n_features"].max() * 0.01, yi, f"{n}", va="center", color=INK, fontsize=10)
     ax.set_yticks(y, funnel["stage"])
-    ax.set_xlabel("Признаков")
+    ax.set_xlabel("Features")
     ax.grid(axis="y", visible=False)
-    ax.set_title("Воронка отбора признаков")
+    ax.set_title("Feature selection funnel")
     fig.tight_layout()
     return save(fig, "10_selection_funnel", out_dir)
 
@@ -143,8 +143,8 @@ def iv_vs_psi(iv: pd.DataFrame, stab: pd.DataFrame, min_iv: float, max_psi: floa
     d["x"], d["y"] = d["psi_max"].clip(lower=floor), d["valid_iv"].fillna(0).clip(lower=floor)
     fig, ax = plt.subplots(figsize=(9, 5))
     ok = (d["psi_max"] <= max_psi) & (d["valid_iv"] >= min_iv)
-    ax.scatter(d.loc[~ok, "x"], d.loc[~ok, "y"], s=16, color=AXIS, label="отсеян", zorder=2)
-    ax.scatter(d.loc[ok, "x"], d.loc[ok, "y"], s=18, color=BLUE, label="прошёл дальше", zorder=3)
+    ax.scatter(d.loc[~ok, "x"], d.loc[~ok, "y"], s=16, color=AXIS, label="dropped", zorder=2)
+    ax.scatter(d.loc[ok, "x"], d.loc[ok, "y"], s=18, color=BLUE, label="passed", zorder=3)
     ax.axvline(max_psi, color=INK2, lw=0.9)
     ax.axhline(min_iv, color=INK2, lw=0.9)
     ax.set_xscale("log")
@@ -156,9 +156,9 @@ def iv_vs_psi(iv: pd.DataFrame, stab: pd.DataFrame, min_iv: float, max_psi: floa
         if len(r):
             ax.annotate(f, (r["x"].iat[0], r["y"].iat[0]), xytext=(-6, 5), textcoords="offset points",
                         fontsize=8.5, color=INK, ha="right")
-    ax.set_xlabel("PSI: максимум по месяцам разработки к первым трём месяцам (лог)")
-    ax.set_ylabel("IV на valid, бины обучены на train (лог)")
-    ax.set_title("Стабильность vs предсказательная сила")
+    ax.set_xlabel("PSI: max over development months vs first three months (log)")
+    ax.set_ylabel("Valid IV, bins fitted on train (log)")
+    ax.set_title("Stability vs predictive power")
     ax.legend(loc="lower right")
     fig.tight_layout()
     return save(fig, "11_iv_vs_psi", out_dir)
@@ -172,11 +172,11 @@ def evidence_vs_canaries(ev: pd.DataFrame, floor: pd.Series, top: int = 30, out_
     y = np.arange(len(real))[::-1]
     ax.barh(y, real["permutation_importance"], color=np.where(real["beats_canaries"], BLUE, AXIS), height=0.65)
     ax.axvline(best_canary, color=ORANGE, lw=1.5)
-    ax.text(best_canary, len(real) - 0.3, " лучшая шумовая канарейка", color=INK, fontsize=9, va="bottom")
+    ax.text(best_canary, len(real) - 0.3, " best noise canary", color=INK, fontsize=9, va="bottom")
     ax.set_yticks(y, real["feature"], fontsize=8.5)
     ax.grid(axis="y", visible=False)
-    ax.set_xlabel("Permutation importance: падение Gini на valid при перемешивании")
-    ax.set_title(f"Топ-{top} признаков по permutation importance")
+    ax.set_xlabel("Permutation importance: valid Gini drop when shuffled")
+    ax.set_title(f"Top {top} features by permutation importance")
     fig.tight_layout()
     return save(fig, "12_permutation_vs_canaries", out_dir)
 
@@ -195,24 +195,24 @@ def ensemble_heatmap(table: pd.DataFrame, top: int = 25, out_dir=None):
     ax.set_xticks(range(t.shape[1]), t.columns)
     ax.set_yticks(range(t.shape[0]), t.index, fontsize=8.5)
     ax.grid(False)
-    ax.set_title("Ранги признака в каждом источнике (1 = лучший)")
-    fig.colorbar(im, ax=ax, shrink=0.6, label="ранг")
+    ax.set_title("Feature rank in each evidence source (1 = best)")
+    fig.colorbar(im, ax=ax, shrink=0.6, label="rank")
     fig.tight_layout()
     return save(fig, "13_rank_ensemble", out_dir)
 
 
 def saturation(sat: pd.DataFrame, n_final: int, out_dir=None):
     fig, ax = plt.subplots(figsize=(8, 4))
-    ax.plot(sat["n_features"], sat["train_gini"], marker="o", color=SPLIT_COLORS["train"], label="train (среднее по фолдам)")
-    ax.plot(sat["n_features"], sat["valid_gini"], marker="o", color=SPLIT_COLORS["valid"], label="out-of-fold (среднее по фолдам)")
+    ax.plot(sat["n_features"], sat["train_gini"], marker="o", color=SPLIT_COLORS["train"], label="train (mean over folds)")
+    ax.plot(sat["n_features"], sat["valid_gini"], marker="o", color=SPLIT_COLORS["valid"], label="out-of-fold (mean over folds)")
     if "valid_gini_std" in sat:
         ax.fill_between(sat["n_features"], sat["valid_gini"] - sat["valid_gini_std"], sat["valid_gini"] + sat["valid_gini_std"],
                         color=SPLIT_COLORS["valid"], alpha=0.12, lw=0)
     ax.axvline(n_final, color=ORANGE, lw=1.5)
-    ax.text(n_final, ax.get_ylim()[0], f"  выбрано: {n_final}", color=INK, fontsize=9, va="bottom")
-    ax.set_xlabel("Число признаков (по порядку ансамбля рангов)")
+    ax.text(n_final, ax.get_ylim()[0], f"  chosen: {n_final}", color=INK, fontsize=9, va="bottom")
+    ax.set_xlabel("Number of features (in rank-ensemble order)")
     ax.set_ylabel("Gini")
-    ax.set_title("Кривая насыщения: 3 фолда по клиентам на train+valid (полоса — ±1 ст. откл.)")
+    ax.set_title("Saturation curve: 3 client folds on train+valid (band = ±1 std)")
     ax.legend()
     fig.tight_layout()
     return save(fig, "14_saturation_curve", out_dir)
@@ -225,8 +225,8 @@ def correlation_heatmap(X: pd.DataFrame, features, out_dir=None, name="15_correl
     ax.set_xticks(range(len(features)), features, rotation=90, fontsize=8)
     ax.set_yticks(range(len(features)), features, fontsize=8)
     ax.grid(False)
-    fig.colorbar(im, ax=ax, shrink=0.7, label="ρ Спирмена")
-    ax.set_title("Корреляции финальных признаков")
+    fig.colorbar(im, ax=ax, shrink=0.7, label="Spearman ρ")
+    ax.set_title("Correlation of the final features")
     fig.tight_layout()
     return save(fig, name, out_dir)
 
@@ -236,12 +236,12 @@ def gru_learning_curves(histories, out_dir=None):
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(11, 3.8))
     for k, h in enumerate(histories):
         h = pd.DataFrame(h)
-        a1.plot(h["epoch"], h["train_loss"], marker="o", color=CATEGORICAL[k], label=f"фолд {k + 1}")
-        a2.plot(h["epoch"], h["valid_gini"], marker="o", color=CATEGORICAL[k], label=f"фолд {k + 1}")
-    a1.set_title("Loss на обучении (multi-task)")
-    a2.set_title("Gini NPL30d90 на внутреннем valid фолда")
+        a1.plot(h["epoch"], h["train_loss"], marker="o", color=CATEGORICAL[k], label=f"fold {k + 1}")
+        a2.plot(h["epoch"], h["valid_gini"], marker="o", color=CATEGORICAL[k], label=f"fold {k + 1}")
+    a1.set_title("Training loss (multi-task)")
+    a2.set_title("NPL30d90 Gini on the fold's inner valid")
     for ax in (a1, a2):
-        ax.set_xlabel("Эпоха")
+        ax.set_xlabel("Epoch")
     a2.legend()
     fig.tight_layout()
     return save(fig, "20_gru_learning_curves", out_dir)
@@ -250,12 +250,12 @@ def gru_learning_curves(histories, out_dir=None):
 def score_distribution(score, y, title: str, xlabel: str, out_dir=None, name="21_score_distribution"):
     fig, ax = plt.subplots(figsize=(8, 3.6))
     bins = np.linspace(np.quantile(score, 0.002), np.quantile(score, 0.998), 60)
-    ax.hist(score[y == 0], bins=bins, density=True, histtype="stepfilled", alpha=0.35, color=BLUE, label="хорошие")
-    ax.hist(score[y == 1], bins=bins, density=True, histtype="stepfilled", alpha=0.35, color=ORANGE, label="дефолт")
+    ax.hist(score[y == 0], bins=bins, density=True, histtype="stepfilled", alpha=0.35, color=BLUE, label="good")
+    ax.hist(score[y == 1], bins=bins, density=True, histtype="stepfilled", alpha=0.35, color=ORANGE, label="default")
     ax.hist(score[y == 0], bins=bins, density=True, histtype="step", lw=1.5, color=BLUE)
     ax.hist(score[y == 1], bins=bins, density=True, histtype="step", lw=1.5, color=ORANGE)
     ax.set_xlabel(xlabel)
-    ax.set_ylabel("Плотность")
+    ax.set_ylabel("Density")
     ax.set_title(title)
     ax.legend()
     fig.tight_layout()
@@ -269,13 +269,13 @@ def optuna_history(studies: dict, out_dir=None):
         df = st.trials_dataframe()
         c = MODEL_COLORS.get(name, BLUE)
         ax.scatter(df["number"], df["value"], s=14, color=c, alpha=0.45)
-        ax.plot(df["number"], df["value"].cummax(), color=c, label=f"{name}: лучший {df['value'].max():.4f}")
+        ax.plot(df["number"], df["value"].cummax(), color=c, label=f"{name}: best {df['value'].max():.4f}")
     ax.set_xlabel("Trial")
     ax.set_ylabel("Penalized valid Gini")
     lo = min(st.trials_dataframe()["value"].quantile(0.1) for st in studies.values())
     hi = max(st.trials_dataframe()["value"].max() for st in studies.values())
     ax.set_ylim(lo - 0.01, hi + 0.01)
-    ax.set_title("Optuna (TPE): история подбора гиперпараметров")
+    ax.set_title("Optuna (TPE): hyperparameter search history")
     ax.legend(loc="lower right")
     fig.tight_layout()
     return save(fig, "30_optuna_history", out_dir)
@@ -289,8 +289,8 @@ def param_importance(study, out_dir=None, name="31_param_importance"):
     fig, ax = plt.subplots(figsize=(7, 3.6))
     ax.barh(s.index, s.values, color=BLUE, height=0.6)
     ax.grid(axis="y", visible=False)
-    ax.set_xlabel("|ρ Спирмена| параметра с целевой метрикой")
-    ax.set_title("Какие гиперпараметры важнее (XGB + GRU)")
+    ax.set_xlabel("|Spearman ρ| of parameter with the objective")
+    ax.set_title("Which hyperparameters matter (XGB + GRU)")
     fig.tight_layout()
     return save(fig, name, out_dir)
 
@@ -303,9 +303,9 @@ def boosting_curve(model, out_dir=None):
         ax.plot(np.arange(1, len(auc) + 1), 2 * auc - 1, color=SPLIT_COLORS[lab], label=lab)
     ax.axvline(model.best_iteration + 1, color=ORANGE, lw=1.5)
     ax.text(model.best_iteration + 1, ax.get_ylim()[0], f"  best iteration = {model.best_iteration + 1}", fontsize=9, va="bottom")
-    ax.set_xlabel("Число деревьев")
+    ax.set_xlabel("Number of trees")
     ax.set_ylabel("Gini")
-    ax.set_title("Кривая обучения финального бустинга (early stopping по valid)")
+    ax.set_title("Learning curve of the final booster (early stopping on valid)")
     ax.legend()
     fig.tight_layout()
     return save(fig, "32_boosting_curve", out_dir)
@@ -333,7 +333,7 @@ def gini_comparison(metrics: pd.DataFrame, ci: pd.DataFrame | None = None, out_d
     ax.set_ylabel("Gini")
     lo = np.nanmin(metrics[splits].to_numpy(dtype=float))
     ax.set_ylim(max(0, lo - 0.1), np.nanmax(metrics[splits].to_numpy(dtype=float)) + 0.06)
-    ax.set_title("Gini по выборкам (OOT — с 95% бутстрэп-интервалом по клиентам)")
+    ax.set_title("Gini by sample (OOT with 95% client-bootstrap CI)")
     ax.legend(ncol=len(models), loc="upper center", bbox_to_anchor=(0.5, -0.1))
     fig.tight_layout()
     return save(fig, "40_gini_comparison", out_dir)
@@ -348,8 +348,8 @@ def delta_bootstrap(delta: np.ndarray, point: float, label: str, out_dir=None):
     ax.axvline(0, color=INK, lw=1.2)
     ax.axvline(point, color=ORANGE, lw=2)
     ax.set_title(f"{label}: ΔGini = {point:+.4f}, 95% CI [{lo:+.4f}; {hi:+.4f}]")
-    ax.set_xlabel("ΔGini на OOT (бутстрэп по клиентам)")
-    ax.set_ylabel("Повторов")
+    ax.set_xlabel("OOT ΔGini (client bootstrap)")
+    ax.set_ylabel("Draws")
     fig.tight_layout()
     return save(fig, "41_delta_gini_bootstrap", out_dir)
 
@@ -364,15 +364,15 @@ def gini_by_segment(df: pd.DataFrame, out_dir=None):
         pos = x - 0.4 + w / 2 + k * w
         ax.bar(pos, df[mname], width=w * 0.92, color=MODEL_COLORS.get(mname, CATEGORICAL[k]), label=mname)
     ax.set_xticks(x, df.index)
-    ax.set_ylabel("Gini на OOT")
+    ax.set_ylabel("OOT Gini")
     ax.set_ylim(max(0, df.to_numpy().min() - 0.1), df.to_numpy().max() + 0.04)
-    ax.set_title("Качество в срезах сегментов (OOT)")
+    ax.set_title("Quality by segment (OOT)")
     ax.legend(ncol=len(models), loc="upper center", bbox_to_anchor=(0.5, -0.1))
     fig.tight_layout()
     return save(fig, "42_gini_by_segment", out_dir)
 
 
-def roc_curves(curves: dict, out_dir=None, title="ROC на OOT", name="43_roc_oot", colors=None):
+def roc_curves(curves: dict, out_dir=None, title="ROC on OOT", name="43_roc_oot", colors=None):
     from sklearn.metrics import roc_curve
     fig, ax = plt.subplots(figsize=(5.6, 5.4))
     for k, (lab, (y, p)) in enumerate(curves.items()):
@@ -398,9 +398,9 @@ def calibration(tables: dict, out_dir=None):
     ax.plot([0, mx], [0, mx], color=AXIS, lw=1)
     ax.xaxis.set_major_formatter(PercentFormatter(1.0, decimals=0))
     ax.yaxis.set_major_formatter(PercentFormatter(1.0, decimals=0))
-    ax.set_xlabel("Средний прогноз PD в дециле")
-    ax.set_ylabel("Фактическая доля дефолтов")
-    ax.set_title("Калибровка по децилям")
+    ax.set_xlabel("Mean predicted PD in decile")
+    ax.set_ylabel("Observed default rate")
+    ax.set_title("Calibration by decile")
     ax.legend()
     fig.tight_layout()
     return save(fig, "50_calibration", out_dir)
@@ -415,9 +415,9 @@ def risk_grades(tables: dict, out_dir=None):
         ax.bar(pos, t["bad_rate"], width=w * 0.92, color=SPLIT_COLORS.get(lab, CATEGORICAL[i]), label=lab)
     ax.yaxis.set_major_formatter(PercentFormatter(1.0, decimals=0))
     ax.set_xticks(range(1, int(max(t["grade"].max() for t in tables.values())) + 1))
-    ax.set_xlabel("Риск-грейд (границы — квантили PD на train; 1 = наименьший риск)")
-    ax.set_ylabel("Доля дефолтов")
-    ax.set_title("Монотонность риск-грейдов на всех выборках")
+    ax.set_xlabel("Risk grade (train PD quantiles; 1 = lowest risk)")
+    ax.set_ylabel("Default rate")
+    ax.set_title("Risk-grade monotonicity on every sample")
     ax.legend()
     fig.tight_layout()
     return save(fig, "51_risk_grades", out_dir)
@@ -429,13 +429,13 @@ def monthly_gini(df: pd.DataFrame, models, oot_start, out_dir=None):
         ax.plot(df["month"], df[mname], marker="o", color=MODEL_COLORS.get(mname, CATEGORICAL[k]), label=mname)
     _shade_oot(ax, oot_start)
     ax.set_ylabel("Gini")
-    ax.set_title("Помесячная стабильность Gini")
+    ax.set_title("Monthly Gini stability")
     ax.legend(ncol=len(models), loc="lower left")
     fig.tight_layout()
     return save(fig, "52_monthly_gini", out_dir)
 
 
-def psi_bars(psi_s: pd.Series, out_dir=None, title="PSI признаков финальной модели: train → OOT", name="53_feature_psi"):
+def psi_bars(psi_s: pd.Series, out_dir=None, title="PSI of final-model features: train → OOT", name="53_feature_psi"):
     s = psi_s.sort_values()
     fig, ax = plt.subplots(figsize=(8.5, 0.28 * len(s) + 1.5))
     ax.barh(s.index, s.values, color=np.where(s.values > 0.1, YELLOW, BLUE), height=0.65)
@@ -443,7 +443,7 @@ def psi_bars(psi_s: pd.Series, out_dir=None, title="PSI признаков фи�
         ax.axvline(v, color=INK2, lw=0.9)
     ax.grid(axis="y", visible=False)
     ax.tick_params(axis="y", labelsize=8.5)
-    ax.set_xlabel("PSI (0.1 — умеренный сдвиг, 0.25 — значимый)")
+    ax.set_xlabel("PSI (0.1 = moderate shift, 0.25 = significant)")
     ax.set_title(title)
     fig.tight_layout()
     return save(fig, name, out_dir)
@@ -470,8 +470,8 @@ def shap_beeswarm(shap_values: np.ndarray, X: pd.DataFrame, top: int = 15, out_d
     ax.axvline(0, color=AXIS, lw=1)
     ax.set_yticks(range(len(order)), X.columns[order[::-1]], fontsize=8.5)
     ax.grid(axis="y", visible=False)
-    ax.set_xlabel("SHAP (вклад в log-odds дефолта)")
-    ax.set_title("SHAP: влияние признаков (цвет — значение признака: синий низкое, красный высокое, серый пропуск)")
+    ax.set_xlabel("SHAP (contribution to default log-odds)")
+    ax.set_title("SHAP impact (colour = feature value: blue low, red high, grey missing)")
     fig.tight_layout()
     return save(fig, "60_shap_beeswarm", out_dir)
 
@@ -485,7 +485,7 @@ def shap_dependence(x: np.ndarray, sv: np.ndarray, feature: str, out_dir=None, n
     ax.axhline(0, color=AXIS, lw=1)
     ax.set_xlabel(feature)
     ax.set_ylabel("SHAP")
-    ax.set_title(f"Зависимость вклада от значения: {feature}")
+    ax.set_title(f"SHAP dependence: {feature}")
     fig.tight_layout()
     return save(fig, name or f"61_shap_dependence_{feature}", out_dir)
 
@@ -501,9 +501,9 @@ def approval_curves(curves: dict, at: float = 0.8, out_dir=None):
     ax.xaxis.set_major_formatter(PercentFormatter(1.0, decimals=0))
     ax.yaxis.set_major_locator(mpl.ticker.MultipleLocator(0.02))
     ax.yaxis.set_major_formatter(PercentFormatter(1.0, decimals=0))
-    ax.set_xlabel("Уровень одобрения (одобряем заявки с наименьшим PD)")
-    ax.set_ylabel("Доля дефолтов среди одобренных")
-    ax.set_title("Стратегическая кривая на OOT: риск портфеля при заданном уровне одобрения")
+    ax.set_xlabel("Approval rate (lowest-PD applications approved first)")
+    ax.set_ylabel("Default rate among approved")
+    ax.set_title("Strategy curve on OOT: portfolio risk at a given approval rate")
     ax.legend(loc="upper left")
     fig.tight_layout()
     return save(fig, "70_approval_curve", out_dir)

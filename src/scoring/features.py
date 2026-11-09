@@ -14,11 +14,11 @@ HALF_LIFE_DAYS = 60.0
 DAY = pd.Timedelta(days=1)
 
 GROUPS = {
-    "hist": "Внутренняя кредитная история",
-    "bki": "Кредитное бюро",
-    "app": "Анкета и параметры заявки",
-    "dig": "Цифровой след",
-    "coll": "Взыскание",
+    "hist": "Internal credit history",
+    "bki": "Credit bureau",
+    "app": "Application form and loan request",
+    "dig": "Digital footprint",
+    "coll": "Collections",
 }
 
 

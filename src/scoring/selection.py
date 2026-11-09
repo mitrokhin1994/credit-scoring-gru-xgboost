@@ -250,12 +250,12 @@ def select_features(train: pd.DataFrame, valid: pd.DataFrame, features, target: 
                     cfg: SelectionConfig | None = None, log=print, client_col: str = "client_id") -> SelectionResult:
     cfg = cfg or SelectionConfig()
     ytr, yva = train[target].to_numpy(), valid[target].to_numpy()
-    funnel, tables = [("Исходный набор", len(features))], {}
+    funnel, tables = [("Initial set", len(features))], {}
 
     tech = technical_report(train, features, cfg)
     tables["technical"] = tech
     feats = tech.loc[tech["drop_reason"].eq(""), "feature"].tolist()
-    funnel.append(("Технические фильтры (пропуски, константы)", len(feats)))
+    funnel.append(("Technical filters (missing, constant)", len(feats)))
     log(f"technical: {len(features)} -> {len(feats)}")
 
     binners = {f: TreeBinner().fit(train[f], ytr) for f in feats}
@@ -265,7 +265,7 @@ def select_features(train: pd.DataFrame, valid: pd.DataFrame, features, target: 
     uni["leak_flag"] = uni["train_gini"] > cfg.leak_gini
     tables["leakage"] = uni
     feats = uni.loc[~uni["leak_flag"], "feature"].tolist()
-    funnel.append(("Подозрение на утечку (|Gini| > 0.5)", len(feats)))
+    funnel.append(("Suspected leakage (|Gini| > 0.5)", len(feats)))
     log(f"leakage: -> {len(feats)}  flagged: {uni.loc[uni['leak_flag'], 'feature'].tolist()}")
 
     dev = pd.concat([train, valid])
@@ -276,12 +276,12 @@ def select_features(train: pd.DataFrame, valid: pd.DataFrame, features, target: 
                        "n_bins": [len(binners[f].woe_) for f in feats]})
     tables["stability"], tables["iv"] = stab, iv
     feats = stab.loc[stab["psi_max"] <= cfg.max_psi, "feature"].tolist()
-    funnel.append((f"Стабильность (PSI ≤ {cfg.max_psi})", len(feats)))
+    funnel.append((f"Stability (PSI ≤ {cfg.max_psi})", len(feats)))
     log(f"stability: -> {len(feats)}  dropped: {stab.loc[stab['psi_max'] > cfg.max_psi, 'feature'].tolist()}")
 
     strong = set(iv.loc[iv["valid_iv"] >= cfg.min_iv, "feature"])
     feats = [f for f in feats if f in strong]
-    funnel.append((f"Предсказательная сила (IV на valid ≥ {cfg.min_iv})", len(feats)))
+    funnel.append((f"Predictive power (valid IV ≥ {cfg.min_iv})", len(feats)))
     log(f"iv: -> {len(feats)}")
 
     # model evidence with noise canaries: a real feature has to beat pure noise
@@ -299,7 +299,7 @@ def select_features(train: pd.DataFrame, valid: pd.DataFrame, features, target: 
     tables["evidence"] = ev
     tables["canary_floor"] = floor
     feats = ev.loc[ev["beats_canaries"], "feature"].tolist()
-    funnel.append(("Важность выше шумовых канареек", len(feats)))
+    funnel.append(("Importance above noise canaries", len(feats)))
     log(f"canaries: -> {len(feats)}")
 
     ev_f = ev[ev["feature"].isin(feats)]
@@ -309,7 +309,7 @@ def select_features(train: pd.DataFrame, valid: pd.DataFrame, features, target: 
     ordered = table.loc[table["ensemble_score"] > 0, "feature"].tolist()
     kept, corr_log = correlation_prune(train, ordered, cfg.max_corr, cfg.max_candidates, seed=cfg.seed)
     tables["correlation"] = corr_log
-    funnel.append((f"Ансамбль рангов + корреляции (|ρ| < {cfg.max_corr})", len(kept)))
+    funnel.append((f"Rank ensemble + correlation (|ρ| < {cfg.max_corr})", len(kept)))
     log(f"ensemble+corr: -> {len(kept)}")
 
     dev = pd.concat([train, valid], ignore_index=True)
@@ -318,7 +318,7 @@ def select_features(train: pd.DataFrame, valid: pd.DataFrame, features, target: 
     best = sat["valid_gini"].max()
     n_final = int(sat.loc[sat["valid_gini"] >= best - cfg.saturation_tol, "n_features"].min())
     selected = kept[:n_final]
-    funnel.append(("Кривая насыщения (финальный набор)", len(selected)))
+    funnel.append(("Saturation curve (final set)", len(selected)))
     log(f"saturation: best valid gini {best:.4f}, chosen n={n_final}")
     return SelectionResult(selected=selected, funnel=pd.DataFrame(funnel, columns=["stage", "n_features"]),
                            tables=tables, binners={f: binners[f] for f in binners})

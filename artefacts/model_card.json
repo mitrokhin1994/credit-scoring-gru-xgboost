@@ -92,56 +92,56 @@
     "threads": 8
   },
   "xgb_base_params": {
-    "learning_rate": 0.04585362727842271,
-    "max_depth": 4,
-    "min_child_weight": 12.363014775795904,
-    "subsample": 0.5620896952741072,
-    "colsample_bytree": 0.5214758901196018,
-    "reg_alpha": 0.04163724426238286,
-    "reg_lambda": 58.124459085125004,
-    "gamma": 5.605945047980562
+    "learning_rate": 0.02112780606922795,
+    "max_depth": 2,
+    "min_child_weight": 19.36664389146178,
+    "subsample": 0.6651054962905918,
+    "colsample_bytree": 0.7276436019358513,
+    "reg_alpha": 4.638441727365796,
+    "reg_lambda": 5.767007374596618,
+    "gamma": 0.5898169198129701
   },
   "xgb_stack_params": {
-    "learning_rate": 0.04769765906385281,
-    "max_depth": 6,
-    "min_child_weight": 11.434932103557765,
-    "subsample": 0.6104939666717965,
-    "colsample_bytree": 0.591069209244674,
-    "reg_alpha": 0.030360951219046108,
-    "reg_lambda": 76.02974517573286,
-    "gamma": 4.8388180050135245
+    "learning_rate": 0.020700630059897217,
+    "max_depth": 5,
+    "min_child_weight": 28.300921635216707,
+    "subsample": 0.6053184376174022,
+    "colsample_bytree": 0.6348487169715284,
+    "reg_alpha": 1.236483559831712,
+    "reg_lambda": 48.50339901881406,
+    "gamma": 1.7098684005779983
   },
   "gini": {
-    "WoE-логрег": {
+    "WoE scorecard": {
       "train": 0.5611,
       "valid": 0.5626,
       "oot": 0.5225
     },
     "XGB base": {
-      "train": 0.5823,
-      "valid": 0.5761,
-      "oot": 0.5331
+      "train": 0.5829,
+      "valid": 0.5726,
+      "oot": 0.5326
     },
     "GRU": {
       "train": 0.4737,
       "valid": 0.4787,
       "oot": 0.4669
     },
-    "WoE-логрег + GRU": {
+    "WoE scorecard + GRU": {
       "train": 0.5867,
       "valid": 0.5886,
       "oot": 0.5486
     },
     "XGB + GRU": {
-      "train": 0.6103,
-      "valid": 0.5954,
-      "oot": 0.556
+      "train": 0.6314,
+      "valid": 0.5977,
+      "oot": 0.557
     }
   },
   "oot_delta_stack_vs_base": {
-    "value": 0.0229,
-    "ci_low": 0.0176,
-    "ci_high": 0.0288
+    "value": 0.0244,
+    "ci_low": 0.019,
+    "ci_high": 0.0309
   },
   "gru_numpy_parity": 4.741548043085686e-07
 }

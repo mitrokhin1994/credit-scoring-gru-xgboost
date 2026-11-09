@@ -1,105 +1,108 @@
-# Скоринг повторных заёмщиков: GRU по сырой истории событий + отбор признаков + XGBoost
+# Credit scoring for repeat borrowers: a GRU over the raw event history + feature selection + XGBoost
 
-PD-модель (NPL30d90) для повторных клиентов кредитора коротких займов. Три идеи:
+A PD model (NPL30d90) for repeat clients of a short-term consumer lender. Three ideas:
 
-1. **GRU реконструирует признак из сырой последовательности событий клиента.** Выдачи, платежи, пролонгации, закрытия и автосписания превращаются в токены, рекуррентная сеть сворачивает их в одно число — `gru_score`, out-of-fold логит по клиентам.
-2. **Отбор признаков** из 300+ кандидатов: технические фильтры → утечки → стабильность (PSI) → IV на valid → gain / SHAP / permutation против шумовых «канареек» → MRMR → ансамбль рангов → корреляции → кривая насыщения.
-3. **XGBoost** на отобранных признаках + `gru_score` (стекинг). Optuna с целевой метрикой *penalized valid Gini*, сравнение с бустингом без GRU, одиночной GRU и WoE-скоркартой, бутстрэп ΔGini по клиентам.
+1. **A GRU reconstructs a feature from the client's raw event sequence.** Loan issues, payments, prolongations, closures and auto-debits become tokens, and a recurrent network folds them into one number — `gru_score`, an out-of-fold logit with folds by client.
+2. **Feature selection** from 300+ candidates: technical filters → leakage → stability (PSI) → IV on valid → gain / SHAP / permutation against noise "canaries" → MRMR → rank ensemble → correlation → saturation curve.
+3. **XGBoost** on the selected features + `gru_score` (stacking). Optuna with a *penalized valid Gini* objective, comparison with XGBoost without the GRU, the GRU alone and a WoE scorecard, client-level bootstrap of ΔGini.
 
-Весь путь — от сырых событий до PD, грейдов и бизнес-эффекта — в одном ноутбуке:
+The whole path — from raw events to PD, risk grades and business impact — is in one notebook:
 [`notebooks/credit_scoring_gru_xgboost.ipynb`](notebooks/credit_scoring_gru_xgboost.ipynb).
 
-## Результат
+## Results
 
-OOT — 16.8 тыс. заявок за 2026-01…04. Эти заявки не участвовали ни в отборе признаков, ни в тюнинге. Доверительные интервалы — бутстрэп по клиентам, 500 повторов.
+OOT — 16.8k applications from 2026-01…04 that took no part in feature selection or tuning. Confidence intervals: client-level bootstrap, 500 draws.
 
-| Модель | Признаки | Gini train | Gini valid | **Gini OOT** [95% CI] | KS OOT |
+| Model | Features | Gini train | Gini valid | **Gini OOT** [95% CI] | KS OOT |
 |---|---|---|---|---|---|
-| WoE-скоркарта | 20 отобранных | 0.561 | 0.563 | 0.522 [0.501; 0.543] | 0.386 |
-| XGBoost base | 20 отобранных | 0.582 | 0.576 | 0.533 [0.512; 0.552] | 0.399 |
-| GRU | только сырая история событий | 0.474 | 0.479 | 0.467 [0.445; 0.488] | 0.354 |
-| WoE-скоркарта + GRU | 20 + `gru_score` | 0.587 | 0.589 | 0.549 [0.527; 0.569] | 0.406 |
-| **XGBoost + GRU** (финальная) | 20 + `gru_score` | 0.610 | 0.595 | **0.556** [0.535; 0.576] | 0.414 |
+| WoE scorecard | 20 selected | 0.561 | 0.563 | 0.522 [0.501; 0.543] | 0.386 |
+| XGBoost base | 20 selected | 0.583 | 0.573 | 0.533 [0.511; 0.552] | 0.397 |
+| GRU | raw event history only | 0.474 | 0.479 | 0.467 [0.445; 0.488] | 0.354 |
+| WoE scorecard + GRU | 20 + `gru_score` | 0.587 | 0.589 | 0.549 [0.527; 0.569] | 0.406 |
+| **XGBoost + GRU** (final) | 20 + `gru_score` | 0.631 | 0.598 | **0.557** [0.536; 0.577] | 0.415 |
 
-- **GRU-признак добавляет +0.023 Gini на OOT** (95% CI [+0.018; +0.029]) к тому же бустингу без него. Прирост значим в каждом сегменте: L2 +0.033, L3 +0.020, L4+ +0.015. Сильнее всего он там, где история короткая и табличным агрегатам истории не на чем строиться.
-- **Вклад источника и вклад сложности разделены.** `gru_score` добавляет скоркарте +0.026. Бустинг поверх скоркарты даёт +0.011 без GRU и +0.007 с GRU. Оба эффекта значимы, но главный прирост — от нового источника информации, а не от модели.
-- **Отбор признаков: 304 → 20.** Отсеяны:
-  - утечка (univariate Gini 0.98);
-  - три дрейфующих поля (PSI 3–16);
-  - пустые и константные поля;
-  - 181 признак, который не обыграл шумовые канарейки;
-  - дубли с |ρ| ≥ 0.8.
-- **Стабильность.** Риск-грейды строго монотонны на train / valid / OOT, PSI скора train → OOT < 0.001, numpy-инференс GRU совпадает с torch с точностью 5·10⁻⁷.
-- **Бизнес-эффект.** При 80% одобрения доля дефолтов среди одобренных снижается с 11.2% до 10.8% (−3.9% отн.).
+- **The GRU feature adds +0.024 Gini on OOT** (95% CI [+0.019; +0.031]) over the same booster without it. The gain is significant in every segment: L2 +0.037, L3 +0.021, L4+ +0.015. It is largest where the history is short and tabular history aggregates have little to work with.
+- **Source vs complexity are separated.** `gru_score` adds +0.026 to the scorecard. Boosting on top of the scorecard adds +0.010 without the GRU and +0.008 with it. Both effects are significant, but the main gain comes from the new information source, not from the model.
+- **Feature selection: 304 → 20.** Removed:
+  - the leakage (univariate Gini 0.98);
+  - three drifting fields (PSI 3–16);
+  - empty and constant fields;
+  - 181 features that did not beat the noise canaries;
+  - duplicates with |ρ| ≥ 0.8.
+- **Stability.** Risk grades are strictly monotonic on train / valid / OOT, score PSI train → OOT < 0.001, numpy GRU inference matches torch to 5·10⁻⁷.
+- **Business impact.** At 80% approval the default rate among approved loans falls from 11.1% to 10.8% (−3.4% relative).
 
 <p align="center">
 <img src="reports/figures/40_gini_comparison.png" width="49%"> <img src="reports/figures/70_approval_curve.png" width="49%">
 <img src="reports/figures/10_selection_funnel.png" width="49%"> <img src="reports/figures/60_shap_beeswarm.png" width="49%">
 </p>
 
-## Почему GRU даёт прирост
+## Why the GRU adds value
 
-Фабрика признаков считает агрегаты **на уровне займа**: просрочку, число пролонгаций, досрочность в днях, частичные платежи, суммы. Порядок и время событий внутри займа при этом теряются. В данных есть скрытый фактор — *нехватка ликвидности* клиента. На исходах займа он почти не сказывается, но виден в микродинамике:
-- обязательство закрывается в последние часы дня погашения;
-- платёж идёт через неуспешное утреннее автосписание и частичное списание;
-- пролонгация оформляется в последний момент.
+The feature factory computes aggregates **at the loan level**: delinquency, number of prolongations, days of early repayment, partial payments, amounts. The order and timing of events inside a loan are lost. The data contain a hidden factor — the client's *liquidity stress*. It barely affects loan outcomes, but it shows in the micro-dynamics:
+- the obligation is settled in the last hours of the due date;
+- the payment goes through a failed morning auto-debit and a partial collection;
+- a prolongation is taken at the very last moment.
 
-GRU видит точное время и тип каждого токена и восстанавливает этот фактор. Агрегаты фабрики — нет. На реальных данных механизм тот же: фабрика никогда не покрывает всех паттернов, а новый тип события подключается к GRU одним флагом в токене, без ручного feature engineering.
+The GRU sees the exact time and type of every token and recovers this factor; the factory aggregates do not. Real data work the same way: a feature factory never covers every pattern, while a new event type plugs into the GRU as one more token flag, without manual feature engineering.
 
-## Методологические решения
+## Methodological choices
 
-| Решение | Зачем |
+| Choice | Why |
 |---|---|
-| **Point-in-time** для всех признаков и токенов; тест пересчитывает признаки на истории, обрезанной моментом заявки | исключить утечку из будущего. Тест поймал реальную ошибку при разработке: присваивание массива без выравнивания по индексу |
-| **valid по клиентам**, а не по заявкам | при общем клиенте valid поощряет модели, которые запоминают людей |
-| **OOF-фолды GRU по клиентам** + early stopping на внутреннем сплите фолда | `gru_score` на train не должен быть «подсмотренным», иначе бустинг его переоценит |
-| **OOT не участвует** ни в отборе признаков, ни в тюнинге; PSI считается по месяцам периода разработки | честная финальная оценка |
-| **IV на valid** с бинами, обученными на train | IV на train завышен для переобученных бинов |
-| **Шумовые канарейки** в модельной значимости | порог «сигнал/шум» с учётом взаимодействий, а не произвольный top-N |
-| **Penalized valid Gini** в Optuna: штраф 0.5 за разрыв train−valid сверх 0.03 | склонить поиск к конфигурациям, которые переносятся на OOT |
-| **Бутстрэп по клиентам** для ΔGini | заявки одного клиента зависимы, бутстрэп по строкам занижает интервалы |
-| **Инференс GRU на numpy** + проверка паритета с torch | в проде не нужен torch, скоринг одной заявки — цикл по ≤128 токенам |
+| **Point-in-time** for every feature and token; a test recomputes features on history truncated at the application time | no leakage from the future. The test caught a real bug during development: an array assigned without index alignment |
+| **Valid split by client**, not by application | with shared clients, valid rewards models that memorise people |
+| **GRU OOF folds by client** + early stopping on an inner split of the fold | `gru_score` on train must not be "peeked", otherwise the booster overweights it |
+| **OOT is used neither in selection nor in tuning**; PSI is computed over development months | an honest final estimate |
+| **IV on valid** with bins fitted on train | IV on train is inflated for overfitted bins |
+| **Noise canaries** in model-based importance | a signal/noise threshold that accounts for interactions instead of an arbitrary top-N |
+| **Saturation curve on 3 client folds** | a single valid sample is too noisy (Gini SE ≈ 0.01) to compare feature sets |
+| **Penalized valid Gini** in Optuna: penalty 0.5 for a train−valid gap above 0.03 | steers the search towards configurations that transfer to OOT |
+| **Client-level bootstrap** for ΔGini | applications of the same client are dependent; a row bootstrap understates intervals |
+| **WoE scorecard with and without `gru_score`** as baselines | separates the gain from the new information source and the gain from model complexity |
+| **GRU inference in numpy** + parity check with torch | production does not need torch; scoring one application is a loop over ≤128 tokens |
 
-## Синтетические данные
+## Synthetic data
 
-Генератор (`src/scoring/synth.py`) моделирует портфель повторных клиентов за 2024-01 … 2026-04:
-- у клиента есть скрытый кредитный риск `z`: дрейф, случайное блуждание, редкие шоки;
-- скрытая нехватка ликвидности `l` — процесс AR(1) по займам;
-- внешняя кредитная нагрузка `e` формирует данные бюро;
-- поведение по каждому займу — зашумлённое наблюдение этих факторов: досрочное погашение, пролонгации, просрочка, частичные и отменённые платежи, часы платежей, автосписания. Привычки, не связанные с риском (кто-то всегда платит ночью), добавляют шум;
-- из займов собирается сырой поток событий в формате DWH, а из него — 300+ признаков;
-- макросдвиг с осени 2025 года поднимает уровень дефолта в OOT;
-- ловушки для отбора: утечка (`coll_calls_cnt_90d` — окно от даты отчёта, а не заявки), смена шкалы скора бюро, растущая версия приложения, новый канал привлечения, поля с 95–98% пропусков, квазиконстанты, дубли в других единицах.
+The generator (`src/scoring/synth.py`) simulates a portfolio of repeat clients for 2024-01 … 2026-04:
+- each client has a hidden credit risk `z`: drift, random walk, rare shocks;
+- a hidden liquidity stress `l` — an AR(1) process over loans;
+- an external debt load `e` drives the bureau data;
+- loan behaviour is a noisy observation of these factors: early repayment, prolongations, delinquency, partial and reversed payments, payment hours, auto-debits. Habits unrelated to risk (some people always pay at night) add noise;
+- a few interactions an additive scorecard cannot express (e.g. external debt hurts low incomes most);
+- loans are turned into a raw event stream in DWH format, and 300+ features are built from it;
+- a macro shift from autumn 2025 raises the default rate in OOT;
+- traps for feature selection: leakage (`coll_calls_cnt_90d` — a window counted from the report date instead of the application date), a bureau score rescale, a growing app version, a new acquisition channel, fields with 95–98% missing, quasi-constants, duplicates in other units.
 
-Объём:
-- 57.7 тыс. повторных заявок: L2 — 20.8 тыс., L3 — 13.3 тыс., L4+ — 23.6 тыс.;
-- 23.4 тыс. клиентов, 120 тыс. займов в истории, 681 тыс. событий, 304 признака;
-- доля дефолтов NPL30d90 — 15.2% в 2025 году и 17.1% в OOT.
+Volume:
+- 57.7k repeat applications: L2 — 20.8k, L3 — 13.3k, L4+ — 23.6k;
+- 23.4k clients, 120k loans in history, 681k events, 304 features;
+- NPL30d90 default rate — 15.2% in 2025 and 17.1% in OOT.
 
-Если бы скрытые факторы риска были известны точно, Gini на OOT составил бы ≈ 0.71. Это потолок при заложенном шуме. Финальная модель достигает 0.556.
+If the hidden risk factors were known exactly, the OOT Gini would be ≈ 0.71. This is the ceiling given the built-in noise.
 
 <p align="center"><img src="reports/figures/02_client_timeline.png" width="90%"></p>
 
-## Структура
+## Structure
 
 ```
 src/scoring/
-  synth.py        генератор: клиенты → займы → поток событий → снимки бюро / анкеты / цифрового следа
-  features.py     300+ признаков point-in-time: события → сводка займа → агрегаты по окнам; PIT-пересчёт
-  sequences.py    события → токены «займ + минута», индекс последовательности каждой заявки
-  gru.py          multi-task GRU, OOF по клиентам, инференс на numpy
-  selection.py    воронка отбора: фильтры, WoE/IV, PSI, gain/SHAP/permutation, канарейки, MRMR, ранги, насыщение
-  modeling.py     Optuna (penalized Gini), финальный XGBoost, бутстрэп, WoE-скоркарта
-  metrics.py      Gini, KS, PSI, риск-грейды, калибровка, кривая одобрения
-  plots.py        графики в едином стиле
-notebooks/credit_scoring_gru_xgboost.ipynb   финальный ноутбук (выполнен, с выводами)
-scripts/generate_data.py                     генерация данных в data/
-tests/                                       PIT признаков и токенов, метрики, WoE/IV, паритет numpy-GRU
-reports/figures/                             все графики ноутбука
-artefacts/                                   модели, веса GRU, model_card.json
+  synth.py        generator: clients → loans → event stream → bureau / application / digital snapshots
+  features.py     300+ point-in-time features: events → loan summary → window aggregates; PIT recompute
+  sequences.py    events → "loan + minute" tokens, sequence index per application
+  gru.py          multi-task GRU, client-level OOF, numpy inference
+  selection.py    selection funnel: filters, WoE/IV, PSI, gain/SHAP/permutation, canaries, MRMR, ranks, saturation
+  modeling.py     Optuna (penalized Gini), final XGBoost, bootstrap, WoE scorecard
+  metrics.py      Gini, KS, PSI, risk grades, calibration, approval curve
+  plots.py        charts in one style
+notebooks/credit_scoring_gru_xgboost.ipynb   the final notebook (executed, with outputs)
+scripts/generate_data.py                     data generation into data/
+tests/                                       PIT of features and tokens, metrics, WoE/IV, numpy-GRU parity
+reports/figures/                             every chart from the notebook
+artefacts/                                   models, GRU weights, model_card.json
 ```
 
-## Запуск
+## How to run
 
 ```bash
 python -m venv .venv
@@ -110,12 +113,12 @@ python -m venv .venv
 .venv\Scripts\python -m jupyter nbconvert --to notebook --execute --inplace notebooks\credit_scoring_gru_xgboost.ipynb
 ```
 
-Ноутбук выполняется на CPU ноутбука примерно за 15 минут: из них GRU — около 2.5 минуты, отбор признаков — 2.5, Optuna — 5. Пути в командах — для Windows, в Linux/macOS — `.venv/bin/...`.
+The notebook runs on a laptop CPU in about 15 minutes: GRU ~2.5 min, feature selection ~2.5 min, Optuna ~5 min. Paths are for Windows; on Linux/macOS use `.venv/bin/...`.
 
-Trials Optuna идут параллельно, поэтому подобранные гиперпараметры и метрики бустингов могут немного отличаться от запуска к запуску. Генерация данных, GRU и отбор признаков детерминированы.
+Optuna trials run in parallel, so the tuned hyperparameters and booster metrics may differ slightly between runs. Data generation, the GRU and feature selection are deterministic.
 
-## Ограничения
+## Limitations
 
-- Данные синтетические. Абсолютные значения Gini зависят от параметров генератора, важны сравнения моделей и методология.
-- Уровень PD в OOT ниже факта из-за заложенного макросдвига. Перед внедрением нужна перекалибровка на свежем окне.
-- Одна модель на все сегменты с номером займа как признаком; качество показано в срезах L2 / L3 / L4+.
+- The data are synthetic. Absolute Gini values depend on the generator parameters; what matters are the model comparisons and the methodology.
+- On OOT the PD level is below the observed rate because of the built-in macro shift; recalibration on a recent window is needed before deployment.
+- One model for all segments, with the loan number as a feature; quality is reported by L2 / L3 / L4+.

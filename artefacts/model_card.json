@@ -1,0 +1,147 @@
+{
+  "target": "npl30d90",
+  "oot_start": "2026-01-01",
+  "selected_features": [
+    "bki_score",
+    "hist_dpd5_share_365d",
+    "app_amount_to_limit",
+    "app_requested_term",
+    "bki_inq_growth_30_180",
+    "hist_early_days_mean_last3",
+    "bki_months_since_overdue",
+    "hist_prol_share_365d",
+    "app_income",
+    "bki_worst_status_24m",
+    "dig_sessions_30d",
+    "dig_form_fill_time_sec",
+    "app_hour",
+    "bki_inq_90d",
+    "bki_mfo_open_cnt",
+    "hist_amount_growth_all",
+    "hist_trend_amount_last2",
+    "app_amount_to_last_ratio",
+    "app_amount_to_income",
+    "bki_closed_with_overdue_share"
+  ],
+  "stack_features": [
+    "bki_score",
+    "hist_dpd5_share_365d",
+    "app_amount_to_limit",
+    "app_requested_term",
+    "bki_inq_growth_30_180",
+    "hist_early_days_mean_last3",
+    "bki_months_since_overdue",
+    "hist_prol_share_365d",
+    "app_income",
+    "bki_worst_status_24m",
+    "dig_sessions_30d",
+    "dig_form_fill_time_sec",
+    "app_hour",
+    "bki_inq_90d",
+    "bki_mfo_open_cnt",
+    "hist_amount_growth_all",
+    "hist_trend_amount_last2",
+    "app_amount_to_last_ratio",
+    "app_amount_to_income",
+    "bki_closed_with_overdue_share",
+    "gru_score"
+  ],
+  "token_fields": [
+    "log_loan_sum",
+    "log_loan_term",
+    "loan_age",
+    "dpd_at_token",
+    "days_to_due_after",
+    "ext_days",
+    "late_vs_first_plan",
+    "principal_left_ratio",
+    "paid_ratio",
+    "n_prol",
+    "open_loans",
+    "loan_no",
+    "dt_prev",
+    "dow_sin",
+    "dow_cos",
+    "hour_sin",
+    "hour_cos",
+    "amt_main",
+    "amt_percent",
+    "amt_penalty",
+    "ev_issue",
+    "ev_payment",
+    "ev_prolongation",
+    "ev_closure",
+    "ev_cancel",
+    "ev_autodebit_fail",
+    "cat_loan",
+    "cat_prolongation",
+    "cat_recurrent"
+  ],
+  "gru_config": {
+    "max_len": 128,
+    "d": 64,
+    "hidden": 64,
+    "dropout": 0.2,
+    "lr": 0.002,
+    "wd": 0.0001,
+    "batch": 512,
+    "epochs": 10,
+    "patience": 2,
+    "aux_weight": 0.3,
+    "seed": 42,
+    "threads": 8
+  },
+  "xgb_base_params": {
+    "learning_rate": 0.04585362727842271,
+    "max_depth": 4,
+    "min_child_weight": 12.363014775795904,
+    "subsample": 0.5620896952741072,
+    "colsample_bytree": 0.5214758901196018,
+    "reg_alpha": 0.04163724426238286,
+    "reg_lambda": 58.124459085125004,
+    "gamma": 5.605945047980562
+  },
+  "xgb_stack_params": {
+    "learning_rate": 0.04769765906385281,
+    "max_depth": 6,
+    "min_child_weight": 11.434932103557765,
+    "subsample": 0.6104939666717965,
+    "colsample_bytree": 0.591069209244674,
+    "reg_alpha": 0.030360951219046108,
+    "reg_lambda": 76.02974517573286,
+    "gamma": 4.8388180050135245
+  },
+  "gini": {
+    "WoE-логрег": {
+      "train": 0.5611,
+      "valid": 0.5626,
+      "oot": 0.5225
+    },
+    "XGB base": {
+      "train": 0.5823,
+      "valid": 0.5761,
+      "oot": 0.5331
+    },
+    "GRU": {
+      "train": 0.4737,
+      "valid": 0.4787,
+      "oot": 0.4669
+    },
+    "WoE-логрег + GRU": {
+      "train": 0.5867,
+      "valid": 0.5886,
+      "oot": 0.5486
+    },
+    "XGB + GRU": {
+      "train": 0.6103,
+      "valid": 0.5954,
+      "oot": 0.556
+    }
+  },
+  "oot_delta_stack_vs_base": {
+    "value": 0.0229,
+    "ci_low": 0.0176,
+    "ci_high": 0.0288
+  },
+  "gru_numpy_parity": 4.741548043085686e-07
+}
